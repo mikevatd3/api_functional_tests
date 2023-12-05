@@ -1,6 +1,8 @@
 import requests
+from icecream import ic
 
-BASE_URL = "https://sdcapi.datadrivendetroit.org"
+BASE_URL = "http://localhost:5000"
+REFERENCE_API = "https://sdcapi.datadrivendetroit.org"
 DETROIT_COSUB_GEOID = "06000US2616322000"
 DETROIT_POPULATION = 645_658
 
@@ -20,8 +22,19 @@ def test_get_data():
         params=dict(table_ids=",".join(table_ids), geo_ids=",".join(geoids)),
     )
 
-    data = response.json()
+    reference = requests.get(
+        REFERENCE_API + f"/1.0/data/show/{acs}",
+        params=dict(table_ids=",".join(table_ids), geo_ids=",".join(geoids)),
+    )
 
+    data = response.json()
+    check = reference.json()
+
+    assert sorted(data.keys()) == sorted(check.keys())
+    assert sorted(data["geography"].values()) == sorted(
+        check["geography"].values()
+    )
+    assert data["release"] == check["release"]
     assert (
         data["data"][DETROIT_COSUB_GEOID]["B01001"]["estimate"]["B01001001"]
         == DETROIT_POPULATION
@@ -50,8 +63,6 @@ def test_geo_search():
         },
     )
 
-    # print(response.json())
-
 
 def test_geo_tiles():
     url = BASE_URL + "/1.0/geo/tiger2021/tiles/140/10/275/378.geojson"
@@ -63,7 +74,6 @@ def test_geo_tiles():
 
 def test_geo_lookup():
     url = BASE_URL + f"/1.0/geo/tiger2021/{DETROIT_COSUB_GEOID}"
-
     response = requests.get(url)
 
     data = response.json()
@@ -87,11 +97,11 @@ def test_get_specified_geo_data():
 
 def test_table_search():
     url = BASE_URL + "/1.0/table/search"
-    response = requests.get(url, params={"q": "norweg"})
+    response = requests.get(url, params={"q": "B0400"})
 
     data = response.json()
 
-    assert data[0]["type"] == "column"
+    assert data[0]["type"] == "table"
     assert data[0]["table_id"] == "B04004"
     assert data[1]["table_id"] == "B04005"
 
@@ -101,7 +111,7 @@ def test_tabulation_details():
     response = requests.get(url)
 
     data = response.json()
-    assert data["tabulation_code"] == '04004'
+    assert data["tabulation_code"] == "04004"
     assert data["table_title"] == "People Reporting Single Ancestry"
     assert data["subject_area"] == "Ancestry"
 
@@ -110,7 +120,7 @@ def test_table_details():
     url = BASE_URL + "/1.0/table/B28001"
     response = requests.get(url, params={"acs": "acs2021_5yr"})
 
-    data = response.json()
+    data = ic(response.json())
 
     assert "simple_table_title" in data
 
@@ -140,7 +150,6 @@ def test_table_geo_comparison_rowcount():
     )
 
     data = response.json()
-
     assert "acs2021_5yr" in data
 
 
@@ -170,30 +179,64 @@ def test_show_specified_data():
 def test_download_specified_data_kml():
     url = BASE_URL + "/1.0/data/download/acs2021_5yr"
     response = requests.get(
-        url, params={"table_ids": ["B01001"], "geo_ids": [DETROIT_COSUB_GEOID], "format": "kml"}
+        url,
+        params={
+            "table_ids": ["B01001"],
+            "geo_ids": [DETROIT_COSUB_GEOID],
+            "format": "kml",
+        },
     )
-    
+
     data = response.json()
+    assert "error" not in data
 
 
 def test_download_specified_data_csv():
     url = BASE_URL + "/1.0/data/download/acs2021_5yr"
     response = requests.get(
-            url, params={"table_ids": ["B01001"], "geo_ids": [DETROIT_COSUB_GEOID], "format": "csv"}
+        url,
+        params={
+            "table_ids": ["B01001"],
+            "geo_ids": [DETROIT_COSUB_GEOID],
+            "format": "csv",
+        },
     )
-    
+
     data = response.json()
+    assert "error" not in data
+
+
+def test_download_specified_data_geojson():
+    url = BASE_URL + "/1.0/data/download/acs2021_5yr"
+    response = requests.get(
+        url,
+        params={
+            "table_ids": ["B01001"],
+            "geo_ids": [DETROIT_COSUB_GEOID],
+            "format": "geojson",
+        },
+    )
+
+    data = response.json()
+    assert "error" not in data
 
 
 def test_compare_geoids_with_parent():
     url = BASE_URL + "/1.0/data/compare/acs2021_5yr/B01001"
 
-    response = requests.get(url, params={"within": DETROIT_COSUB_GEOID, "sumlevel": "140", "geom": False})
+    response = requests.get(
+        url,
+        params={
+            "within": DETROIT_COSUB_GEOID,
+            "sumlevel": "140",
+            "geom": False,
+        },
+    )
 
     data = response.json()
-    
-    assert 'child_geographies' in data
-    assert 'comparison' in data
+
+    assert "child_geographies" in data
+    assert "comparison" in data
 
 
 def test_pull_metadata():
@@ -202,27 +245,3 @@ def test_pull_metadata():
     response = requests.get(url)
 
     data = response.json()
-
-    print(data)
-
-
-if __name__ == "__main__":
-    test_healthcheck()
-    test_get_data()
-    test_get_parents()
-    test_geo_search()
-    test_geo_tiles()
-    test_geo_lookup()
-    test_get_specified_geo_data()
-    test_table_search()
-    test_tabulation_details()
-    test_table_details()
-    test_table_details_with_release()
-    test_table_geo_comparison_rowcount()
-    test_full_text_search()
-    test_show_specified_data()
-    test_download_specified_data_kml()
-    test_download_specified_data_csv()
-    Test also shp, excel, etc
-    test_compare_geoids_with_parent()
-    test_pull_metadata()
